@@ -1,15 +1,11 @@
 
 import json
-import time
 import os
-from influxdb import InfluxDBClient
-import schedule
-import requests
+import time
 
-# # .ENV FILE FOR TESTING
-# if os.path.exists('.env'):
-#     from dotenv import load_dotenv
-#     load_dotenv()
+import requests
+import schedule
+from influxdb import InfluxDBClient
 
 # GLOBALS
 LIVE_CONN = bool(os.environ.get('LIVE_CONN',''))
@@ -50,7 +46,7 @@ def get_saved_data(*args):
 
 def write_to_influx(data_payload):
     INFLUX_CLIENT.write_points(data_payload)
-    pass    
+    pass
 
 def sort_json(working_data):
     # Interate over weather payload and pull out data points
@@ -61,7 +57,7 @@ def sort_json(working_data):
         time_stamp = data_point['time']
         base_dict.update({'time': time_stamp})
         del data_point['time']
-        
+
         # Make everything float to stop insert errors
         for k,v in data_point.items():
             if type(v) == int:
@@ -72,7 +68,7 @@ def sort_json(working_data):
         # Construct payload and insert
         data_payload = [base_dict]
         print("SUBMIT:" + str(data_payload))
-        print('#'*30) 
+        print('#'*30)
         write_to_influx(data_payload)
 
 
