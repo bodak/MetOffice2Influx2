@@ -4,7 +4,8 @@ import time
 
 import requests
 import schedule
-from influxdb import InfluxDBClient
+from influxdb_client import InfluxDBClient
+from influxdb_client.client.write_api import SYNCHRONOUS
 
 # GLOBALS
 LIVE_CONN = bool(os.environ.get("LIVE_CONN", ""))
@@ -12,30 +13,33 @@ API_CLIENT = os.environ.get("API_CLIENT", "")
 API_SECRET = os.environ.get("API_SECRET", "")
 INFLUX_HOST = os.environ.get("INFLUX_HOST", "")
 INFLUX_HOST_PORT = int(os.environ.get("INFLUX_HOST_PORT", ""))
-INFLUX_DATABASE = os.environ.get("INFLUX_DATABASE", "")
+INFLUX_TOKEN = os.environ.get("INFLUX_TOKEN", "")
+INFLUX_ORG = os.environ.get("INFLUX_ORG", "")
+INFLUX_BUCKET = os.environ.get("INFLUX_BUCKET", "")
 LATITUDE = os.environ.get("LATITUDE", "")
 LONGITUDE = os.environ.get("LONGITUDE", "")
 RUNMINS = int(os.environ.get("RUNMINS", 1))
 
+
 INFLUX_CLIENT = InfluxDBClient(
-    host=INFLUX_HOST, port=INFLUX_HOST_PORT, database=INFLUX_DATABASE
+    url=f"http://{INFLUX_HOST}:{INFLUX_HOST_PORT}", org=INFLUX_ORG, token=INFLUX_TOKEN
 )
+INFLUX_WRITE_API = INFLUX_CLIENT.write_api(write_options=SYNCHRONOUS)
 JSON_OUTPUT = "output.json"
 
 
 # Get saved json from MET
 def get_json(client_id, secret):
-    url = "https://api-metoffice.apiconnect.ibmcloud.com/metoffice/production/v0/forecasts/point/hourly?excludeParameterMetadata=false&includeLocationName=true&latitude={}&longitude={}".format(
+    url = "https://api-metoffice.apiconnect.ibmcloud.com/v0/forecasts/point/hourly?excludeParameterMetadata=false&includeLocationName=true&latitude={}&longitude={}".format(
         LATITUDE, LONGITUDE
     )
     headers = {
-        "x-ibm-client-id": client_id,
-        "x-ibm-client-secret": secret,
+        "X-IBM-Client-Id": client_id,
+        "X-IBM-Client-Secret": secret,
         "accept": "application/json",
     }
     resp = requests.get(url, headers=headers)
     payload_data = resp.json()
-    print(payload_data)
     with open(JSON_OUTPUT, "w") as outfile:
         json.dump(payload_data, outfile)
 
@@ -50,8 +54,7 @@ def get_saved_data(*args):
 
 
 def write_to_influx(data_payload):
-    INFLUX_CLIENT.write_points(data_payload)
-    pass
+    INFLUX_WRITE_API.write(INFLUX_BUCKET, INFLUX_ORG, data_payload)
 
 
 def sort_json(working_data):
@@ -72,10 +75,7 @@ def sort_json(working_data):
         base_dict.update({"fields": data_point})
 
         # Construct payload and insert
-        data_payload = [base_dict]
-        print("SUBMIT:" + str(data_payload))
-        print("#" * 30)
-        write_to_influx(data_payload)
+        write_to_influx(base_dict)
 
 
 def do_it():
