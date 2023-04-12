@@ -1,3 +1,5 @@
+import logging
+import logging.config
 import os
 import time
 
@@ -5,6 +7,10 @@ import requests
 import schedule
 from influxdb_client import InfluxDBClient
 from influxdb_client.client.write_api import SYNCHRONOUS
+
+logging.config.fileConfig("logging.ini")
+log = logging.getLogger("json")
+
 
 # GLOBALS
 API_CLIENT = os.environ.get("API_CLIENT", "")
@@ -18,9 +24,15 @@ LATITUDE = os.environ.get("LATITUDE", "")
 LONGITUDE = os.environ.get("LONGITUDE", "")
 RUNMINS = int(os.environ.get("RUNMINS", 0))
 
+log.info(
+    {
+        "message": "starting",
+        "env": {"RUNMINS": RUNMINS, "LATITUDE": LATITUDE, "LONGITUDE": LONGITUDE},
+    }
+)
 
 INFLUX_CLIENT = InfluxDBClient(
-    url=f"http://{INFLUX_HOST}:{INFLUX_HOST_PORT}", org=INFLUX_ORG, token=INFLUX_TOKEN
+    url=f"{INFLUX_HOST}:{INFLUX_HOST_PORT}", org=INFLUX_ORG, token=INFLUX_TOKEN
 )
 INFLUX_WRITE_API = INFLUX_CLIENT.write_api(write_options=SYNCHRONOUS)
 
@@ -33,12 +45,15 @@ def metoffice_request():
         "accept": "application/json",
     }
     resp = requests.get(url, headers=headers)
-    payload_data = resp.json()
-    return payload_data["features"][0]["properties"]["timeSeries"]
+    payload_data = resp.json()["features"][0]["properties"]["timeSeries"]
+    log.info({"message": f"retrieved {len(payload_data)} records from metoffice"})
+    return payload_data
 
 
 def write_to_influx(data_payload):
+    data_payload = list(data_payload)
     INFLUX_WRITE_API.write(INFLUX_BUCKET, INFLUX_ORG, data_payload)
+    log.info({"message": f"updated {len(data_payload)} records in InfluxDB"})
 
 
 def apply_format(data_point):
@@ -67,4 +82,4 @@ if __name__ == "__main__":
         schedule.every(RUNMINS).minutes.do(metoffice_to_influxdb)
         while True:
             schedule.run_pending()
-            time.sleep(60)
+            time.sleep(60 * RUNMINS)
